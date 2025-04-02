@@ -1,0 +1,4 @@
+# Ignore Terraform modules folder
+Terraform/Root/.terraform
+Terraform/Root/.terraform.lock.hcl
+node_modules/
