@@ -95,34 +95,30 @@ module "db_security_group" {
 }
 
 # Create RDS instance in private subnets
-# Replace your existing database module with this:
 module "database" {
   source = "../modules/rds"
 
   project_name    = var.project_name
   environment     = var.environment
   vpc_id          = module.vpc.vpc_id
-  vpc_cidr  = module.vpc.vpc_cidr
+  vpc_cidr        = module.vpc.vpc_cidr
   private_subnets = module.vpc.private_subnet_ids
   
   db_name     = var.db_name
   db_username = var.db_username
   db_password = var.db_password
 
-  # Remove any parameters not needed in the new module
+  # Other parameters remain unchanged
 }
 
-# You can remove the db_security_group module since it's now created in the RDS module
-# Existing modules (vpc, nat, rds, security_group)
-# ...
-
+# Create S3 bucket for static content
 module "s3" {
   source = "../modules/s3"
 
-  bucket_name        = var.s3_bucket_name
-  enable_versioning  = true
-  enable_cors        = true
-  cors_allowed_methods = ["GET", "PUT", "POST", "HEAD"]
+  bucket_name           = var.s3_bucket_name
+  enable_versioning     = true
+  enable_cors           = true
+  cors_allowed_methods  = ["GET", "PUT", "POST", "HEAD"]
   
   tags = {
     Environment = var.environment
@@ -130,6 +126,70 @@ module "s3" {
   }
 }
 
+# Create AWS Secrets Manager for storing sensitive data
+module "secrets_manager" {
+  source = "../modules/secret-manager"
+  
+  project_name    = var.project_name
+  environment     = var.environment
+  
+  # Database credentials
+  db_credentials = {
+    db_host     = module.database.db_instance_endpoint
+    db_name     = var.db_name
+    db_username = var.db_username
+    db_password = var.db_password
+  }
+  
+  # S3 configuration
+  s3_config = {
+    s3_bucket = module.s3.bucket_id
+  }
+  
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# Create CloudFront distribution for global content delivery
+module "cloudfront" {
+  source = "../modules/cloudfront"
+  
+  s3_bucket_name               = module.s3.bucket_id
+  s3_bucket_regional_domain_name = module.s3.bucket_regional_domain_name
+  
+  # Production environment by default
+  eb_endpoint                  = module.elastic_beanstalk.production_environment_endpoint
+  eb_environment_name          = module.elastic_beanstalk.production_environment_name
+  
+  comment                     = "${var.project_name} - ${var.environment} distribution"
+  default_root_object         = "index.html"
+  price_class                 = "PriceClass_100" # North America and Europe
+  
+  # Set to empty for default CloudFront certificate
+  custom_certificate_arn      = ""
+  
+  # No geo restrictions by default
+  geo_restriction_type        = "none"
+  geo_restriction_locations   = []
+  
+  # Optional WAF
+  web_acl_id                  = ""
+  
+  # Enable logging
+  logging_bucket              = "${module.s3.bucket_id}.s3.amazonaws.com"
+  logging_prefix              = "cloudfront-logs/"
+  
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+  
+  depends_on = [module.s3, module.elastic_beanstalk]
+}
+
+# Create Elastic Beanstalk with production and staging environments
 module "elastic_beanstalk" {
   source = "../modules/elastic_beanstalk"
 
@@ -141,7 +201,7 @@ module "elastic_beanstalk" {
   vpc_id             = module.vpc.vpc_id
   public_subnet_ids  = module.vpc.public_subnet_ids
   private_subnet_ids = module.vpc.private_subnet_ids
-  security_group_id = module.app_security_group.security_group_id
+  security_group_id  = module.app_security_group.security_group_id
   
   db_endpoint = module.database.db_instance_endpoint
   db_name     = var.db_name
@@ -150,6 +210,12 @@ module "elastic_beanstalk" {
   
   s3_bucket_name = module.s3.bucket_id
   
+  # Connect to CloudFront
+  cloudfront_distribution_id = module.cloudfront.distribution_id
+  
+  # Use Secrets Manager for sensitive data
+  use_secrets_manager = true
+  
   min_instances = var.min_instances
   max_instances = var.max_instances
   
@@ -157,8 +223,11 @@ module "elastic_beanstalk" {
     Environment = var.environment
     Project     = var.project_name
   }
+  
+  depends_on = [module.database, module.s3, module.secrets_manager]
 }
 
+# Enhance monitoring with CloudWatch
 module "monitoring" {
   source = "../modules/monitoring"
 

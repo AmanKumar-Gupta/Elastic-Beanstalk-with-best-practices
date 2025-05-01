@@ -1,5 +1,16 @@
+# General AWS Settings
+variable "aws_region" {
+  description = "AWS region to deploy resources in"
+  type        = string
+}
+
 variable "environment" {
   description = "Environment name (e.g., dev, staging, prod)"
+  type        = string
+}
+
+variable "project_name" {
+  description = "Name of the project"
   type        = string
 }
 
@@ -18,7 +29,7 @@ variable "resource_tags" {
   default     = {}
 }
 
-# VPC
+# VPC Configuration
 variable "vpc_cidr" {
   description = "CIDR block for the VPC"
   type        = string
@@ -34,7 +45,6 @@ variable "private_subnet_cidrs" {
   type        = list(string)
 }
 
-
 variable "availability_zones" {
   description = "List of availability zones to use"
   type        = list(string)
@@ -47,7 +57,7 @@ variable "single_nat_gateway" {
   default     = false
 }
 
-# Database
+# Database Configuration
 variable "db_name" {
   description = "Name of the database"
   type        = string
@@ -69,29 +79,17 @@ variable "db_port" {
   description = "Port for the database"
   type        = number
   default     = 3306
-  
-}
-variable "aws_region" {
-  description = "AWS region to deploy resources in"
-  type        = string
-  
 }
 
-# Add these to your existing variables.tf
-
+# S3 Storage
 variable "s3_bucket_name" {
   description = "Name of the S3 bucket for static assets"
   type        = string
 }
 
+# Elastic Beanstalk Configuration
 variable "app_name" {
   description = "Name of the application"
-  type        = string
-}
-
-
-variable "project_name" {
-  description = "Name of the project"
   type        = string
 }
 
@@ -113,6 +111,7 @@ variable "max_instances" {
   default     = 4
 }
 
+# Monitoring and Alerting
 variable "alarm_emails" {
   description = "List of email addresses for alarm notifications"
   type        = list(string)
